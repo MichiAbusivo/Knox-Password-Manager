@@ -820,8 +820,9 @@ final class VaultViewModel: ObservableObject {
     }
 
     func navigateToPanel(_ panel: VaultPanel) {
+        let leavingHealth = currentPanel == .health
         currentPanel = panel
-        if panel != .list {
+        if panel != .list || leavingHealth {
             selectedItemID = nil
         }
         if panel == .addNew {

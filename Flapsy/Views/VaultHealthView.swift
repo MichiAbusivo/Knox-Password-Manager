@@ -13,51 +13,70 @@ struct VaultHealthView: View {
     @State private var filter: HealthFilter = .all
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                healthScoreCard
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    healthScoreCard
 
-                if !vault.flaggedItemIDs.isEmpty {
-                    filterBar
-                }
+                    if !vault.flaggedItemIDs.isEmpty {
+                        filterBar
+                    }
 
-                if showSection(.reused) && !vault.reusedPasswordGroups.isEmpty {
-                    issueSection(
-                        title: "REUSED PASSWORDS",
-                        icon: "arrow.triangle.2.circlepath",
-                        color: theme.accentRed,
-                        groups: vault.reusedPasswordGroups,
-                        groupLabel: { items in
-                            "\(items.count) items share the same password"
-                        }
-                    )
-                }
+                    if showSection(.reused) && !vault.reusedPasswordGroups.isEmpty {
+                        issueSection(
+                            title: "REUSED PASSWORDS",
+                            icon: "arrow.triangle.2.circlepath",
+                            color: theme.accentRed,
+                            groups: vault.reusedPasswordGroups,
+                            groupLabel: { items in
+                                "\(items.count) items share the same password"
+                            }
+                        )
+                    }
 
-                if showSection(.weak) && !vault.weakPasswordItemIDs.isEmpty {
-                    weakPasswordsSection
-                }
+                    if showSection(.weak) && !vault.weakPasswordItemIDs.isEmpty {
+                        weakPasswordsSection
+                    }
 
-                if showSection(.duplicates) && !vault.duplicateLoginGroups.isEmpty {
-                    issueSection(
-                        title: "DUPLICATE LOGINS",
-                        icon: "doc.on.doc.fill",
-                        color: theme.accentYellow,
-                        groups: vault.duplicateLoginGroups,
-                        groupLabel: { items in
-                            let url = items.first?.url ?? "Unknown"
-                            let user = items.first?.username ?? ""
-                            return "\(url) (\(user))"
-                        }
-                    )
-                }
+                    if showSection(.duplicates) && !vault.duplicateLoginGroups.isEmpty {
+                        issueSection(
+                            title: "DUPLICATE LOGINS",
+                            icon: "doc.on.doc.fill",
+                            color: theme.accentYellow,
+                            groups: vault.duplicateLoginGroups,
+                            groupLabel: { items in
+                                let url = items.first?.url ?? "Unknown"
+                                let user = items.first?.username ?? ""
+                                return "\(url) (\(user))"
+                            }
+                        )
+                    }
 
-                if vault.flaggedItemIDs.isEmpty {
-                    allClearCard
+                    if vault.flaggedItemIDs.isEmpty {
+                        allClearCard
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
+            .frame(maxHeight: vault.selectedItemID != nil ? 200 : .infinity)
+
+            if vault.selectedItem != nil {
+                ItemDetailView()
+            }
+
+            Spacer(minLength: 0)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func selectItem(_ id: UUID) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            vault.selectedItemID = vault.selectedItemID == id ? nil : id
+            vault.showPassword = false
+            vault.showCardNumber = false
+            vault.showCVV = false
+            vault.isEditingItem = false
+        }
     }
 
     private func showSection(_ section: HealthFilter) -> Bool {
@@ -216,7 +235,7 @@ struct VaultHealthView: View {
                     }
 
                     ForEach(group) { item in
-                        Button(action: { vault.navigateToItem(item.id) }) {
+                        Button(action: { selectItem(item.id) }) {
                             HStack(spacing: 8) {
                                 itemIcon(for: item)
                                     .frame(width: 24, height: 24)
@@ -263,7 +282,7 @@ struct VaultHealthView: View {
             let weakItems = vault.items.filter { vault.weakPasswordItemIDs.contains($0.id) }
             VStack(spacing: 4) {
                 ForEach(weakItems) { item in
-                    Button(action: { vault.navigateToItem(item.id) }) {
+                    Button(action: { selectItem(item.id) }) {
                         HStack(spacing: 8) {
                             itemIcon(for: item)
                                 .frame(width: 24, height: 24)
