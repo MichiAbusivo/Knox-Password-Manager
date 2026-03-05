@@ -185,6 +185,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionWindowBelowStatusItem()
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+
+            // Auto-focus search when vault is unlocked on the list panel
+            if vaultViewModel.isUnlocked && vaultViewModel.currentPanel == .list {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.vaultViewModel.isSearchFocused = true
+                }
+            }
         }
     }
 
