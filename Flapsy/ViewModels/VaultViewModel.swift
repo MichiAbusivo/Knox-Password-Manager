@@ -47,6 +47,7 @@ enum VaultPanel {
     case tags
     case settings
     case health
+    case trash
 }
 
 final class VaultViewModel: ObservableObject {
@@ -219,8 +220,17 @@ final class VaultViewModel: ObservableObject {
         return items.first { $0.id == id }
     }
 
+    var activeItems: [VaultItem] {
+        items.filter { $0.deletedAt == nil }
+    }
+
+    var trashedItems: [VaultItem] {
+        items.filter { $0.deletedAt != nil }
+            .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+    }
+
     var filteredItems: [VaultItem] {
-        let filtered = items.filter { item in
+        let filtered = activeItems.filter { item in
             let matchesCategory = activeCategory == "all" || item.category == activeCategory
             let matchesType = typeFilter == nil || item.type == typeFilter
             let matchesFavorite = !showFavoritesOnly || item.isFavorite
@@ -296,7 +306,7 @@ final class VaultViewModel: ObservableObject {
     private var healthDebounce: AnyCancellable?
 
     func recomputeHealth() {
-        let currentItems = items
+        let currentItems = activeItems
 
         let weak = Set<UUID>(
             currentItems.compactMap { item -> UUID? in
@@ -743,6 +753,8 @@ final class VaultViewModel: ObservableObject {
         }
 
         setupHealthMonitor()
+        purgeExpiredTrash()
+        SecretKeyService.shared.migrateToSecureEnclaveIfNeeded()
     }
 
     // MARK: - CRUD Actions
@@ -847,7 +859,7 @@ final class VaultViewModel: ObservableObject {
     }
 
     func categoryHasItems(_ key: String) -> Bool {
-        items.contains { $0.category == key }
+        activeItems.contains { $0.category == key }
     }
 
     func categoryFor(key: String) -> VaultCategory? {
@@ -855,9 +867,33 @@ final class VaultViewModel: ObservableObject {
     }
 
     func deleteItem(_ id: UUID) {
-        items.removeAll { $0.id == id }
+        if let idx = items.firstIndex(where: { $0.id == id }) {
+            items[idx].deletedAt = Date()
+        }
         if selectedItemID == id {
             selectedItemID = nil
+        }
+    }
+
+    func restoreItem(_ id: UUID) {
+        if let idx = items.firstIndex(where: { $0.id == id }) {
+            items[idx].deletedAt = nil
+        }
+    }
+
+    func permanentlyDeleteItem(_ id: UUID) {
+        items.removeAll { $0.id == id }
+    }
+
+    func emptyTrash() {
+        items.removeAll { $0.deletedAt != nil }
+    }
+
+    func purgeExpiredTrash() {
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+        items.removeAll { item in
+            if let deletedAt = item.deletedAt, deletedAt < cutoff { return true }
+            return false
         }
     }
 
@@ -1119,7 +1155,7 @@ final class VaultViewModel: ObservableObject {
         guard let url = ExportService.shared.showSavePanel(format: .encryptedBackup) else { return }
 
         let settings = settingsViewModel?.toVaultSettings() ?? VaultSettings.defaults
-        let vaultData = VaultData(items: items, categories: categories, settings: settings)
+        let vaultData = VaultData(items: activeItems, categories: categories, settings: settings)
 
         isExporting = true
         exportError = ""
@@ -1132,6 +1168,7 @@ final class VaultViewModel: ObservableObject {
                     self?.showExportSheet = false
                     self?.exportPasswordInput = ""
                     self?.exportPasswordConfirm = ""
+                    self?.settingsViewModel?.lastBackupDate = Date()
                     self?.settingsViewModel?.showExportSuccess = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         self?.settingsViewModel?.showExportSuccess = false
@@ -1200,9 +1237,10 @@ final class VaultViewModel: ObservableObject {
                 guard let url = ExportService.shared.showSavePanel(format: .csv) else { return }
 
                 do {
-                    try ExportService.shared.exportCSV(items: self.items, to: url)
+                    try ExportService.shared.exportCSV(items: self.activeItems, to: url)
                     self.showExportSheet = false
                     self.csvExportMasterPassword = ""
+                    self.settingsViewModel?.lastBackupDate = Date()
                     self.settingsViewModel?.showExportSuccess = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         self.settingsViewModel?.showExportSuccess = false

@@ -240,6 +240,8 @@ struct VaultContainerView: View {
             SettingsView()
         case .health:
             VaultHealthView()
+        case .trash:
+            TrashView()
         }
     }
 
@@ -251,6 +253,7 @@ struct VaultContainerView: View {
         case .tags: return "Categories"
         case .settings: return "Settings"
         case .health: return "Health"
+        case .trash: return "Trash"
         }
     }
 }

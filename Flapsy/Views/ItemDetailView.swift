@@ -5,6 +5,7 @@ struct ItemDetailView: View {
     @EnvironmentObject var settings: SettingsViewModel
     @Environment(\.theme) var theme
     @State private var showDeleteConfirmation = false
+    @State private var showMarkdownPreview = true
 
     private func dismissDetail() {
         withAnimation(.easeInOut(duration: 0.15)) {
@@ -652,11 +653,34 @@ struct ItemDetailView: View {
     @ViewBuilder
     private func noteDetail(_ item: VaultItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("SECURE NOTE")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundColor(theme.textFaint)
-                .tracking(1)
-            SelectableText(text: item.noteText ?? "", theme: theme)
+            HStack {
+                Text("SECURE NOTE")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(theme.textFaint)
+                    .tracking(1)
+                Spacer()
+                Button(action: { showMarkdownPreview.toggle() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: showMarkdownPreview ? "doc.richtext" : "doc.plaintext")
+                            .font(.system(size: 10))
+                        Text(showMarkdownPreview ? "Rich" : "Raw")
+                            .font(.system(size: 10, design: .monospaced))
+                    }
+                    .foregroundColor(theme.textFaint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(theme.fieldBg)
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if showMarkdownPreview {
+                MarkdownTextView(text: item.noteText ?? "", theme: theme)
+            } else {
+                SelectableText(text: item.noteText ?? "", theme: theme)
+            }
+
             HStack {
                 Spacer()
                 IconButton(
@@ -669,6 +693,26 @@ struct ItemDetailView: View {
         .padding(12)
         .background(theme.fieldBg)
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Markdown Text View
+
+struct MarkdownTextView: View {
+    let text: String
+    let theme: FlapsyTheme
+
+    var body: some View {
+        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attributed)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(theme.text)
+                .textSelection(.enabled)
+                .lineSpacing(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            SelectableText(text: text, theme: theme)
+        }
     }
 }
 

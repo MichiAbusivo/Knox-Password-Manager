@@ -20,6 +20,7 @@ struct SettingsView: View {
                 updateCheckSection
                 secretKeySection
                 changePasswordSection
+                backupReminder
                 dataSection
                 securityInfo
                 vaultLocation
@@ -523,6 +524,54 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Backup Reminder
+
+    private var backupReminder: some View {
+        Group {
+            if settings.lastBackupDate == nil || Date().timeIntervalSince(settings.lastBackupDate!) > 30 * 24 * 60 * 60 {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(theme.accentYellow)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(settings.lastBackupDate == nil ? "No backup yet" : "Backup overdue")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundColor(theme.accentYellow)
+                        Text(backupReminderText)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(theme.textFaint)
+                    }
+                    Spacer()
+                    Button(action: { vault.startExportBackup() }) {
+                        Text("Backup")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(theme.accentBlueLt)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(theme.accentBlue.opacity(0.1))
+                            .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(theme.accentYellow.opacity(0.06))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(theme.accentYellow.opacity(0.2), lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private var backupReminderText: String {
+        guard let date = settings.lastBackupDate else {
+            return "Export an encrypted backup to protect your data."
+        }
+        let days = Int(Date().timeIntervalSince(date) / (24 * 60 * 60))
+        return "Last backup was \(days) day\(days == 1 ? "" : "s") ago."
+    }
+
     // MARK: - Import / Export
 
     private var dataSection: some View {
@@ -607,7 +656,7 @@ struct SettingsView: View {
             VStack(spacing: 5) {
                 securityRow("Encryption", value: "AES-256-GCM")
                 securityRow("KDF", value: Argon2Service.shared.parameterDescription)
-                securityRow("Secret Key", value: "128-bit + HKDF")
+                securityRow("Secret Key", value: SecureEnclaveService.shared.isAvailable ? "128-bit + HKDF + SE" : "128-bit + HKDF")
                 securityRow("Key memory", value: "mlock + zero-wipe")
                 securityRow("Anti-debug", value: "ptrace + sysctl")
                 securityRow("File perms", value: "0600 owner-only")

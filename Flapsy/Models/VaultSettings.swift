@@ -29,6 +29,7 @@ struct VaultSettings: Codable {
     var checkForUpdates: Bool
     var keepWindowOpen: Bool
     var openURLCopyPassword: Bool
+    var lastBackupDate: Date?
 
     static var defaults: VaultSettings {
         VaultSettings(
@@ -66,6 +67,7 @@ struct VaultSettings: Codable {
         checkForUpdates = try container.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? true
         keepWindowOpen = try container.decodeIfPresent(Bool.self, forKey: .keepWindowOpen) ?? false
         openURLCopyPassword = try container.decodeIfPresent(Bool.self, forKey: .openURLCopyPassword) ?? false
+        lastBackupDate = try container.decodeIfPresent(Date.self, forKey: .lastBackupDate)
     }
 
     init(menuBarIcon: String, menuBarShowLabel: Bool, menuBarLabel: String,
@@ -76,7 +78,8 @@ struct VaultSettings: Codable {
          confirmBeforeDelete: Bool = true,
          checkForUpdates: Bool = true,
          keepWindowOpen: Bool = false,
-         openURLCopyPassword: Bool = false) {
+         openURLCopyPassword: Bool = false,
+         lastBackupDate: Date? = nil) {
         self.menuBarIcon = menuBarIcon
         self.menuBarShowLabel = menuBarShowLabel
         self.menuBarLabel = menuBarLabel
@@ -91,5 +94,6 @@ struct VaultSettings: Codable {
         self.checkForUpdates = checkForUpdates
         self.keepWindowOpen = keepWindowOpen
         self.openURLCopyPassword = openURLCopyPassword
+        self.lastBackupDate = lastBackupDate
     }
 }

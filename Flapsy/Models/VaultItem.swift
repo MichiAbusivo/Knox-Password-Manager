@@ -33,6 +33,9 @@ struct VaultItem: Codable, Identifiable {
     // Note fields
     var noteText: String?
 
+    // Soft delete
+    var deletedAt: Date?
+
     // Computed
     var subtitle: String {
         switch type {

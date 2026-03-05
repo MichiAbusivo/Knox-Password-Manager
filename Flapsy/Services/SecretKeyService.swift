@@ -33,14 +33,45 @@ final class SecretKeyService {
         return Data(bytes)
     }
 
-    // MARK: - Keychain Storage (no biometric protection)
+    // MARK: - Storage (Secure Enclave preferred, Keychain fallback)
 
-    /// Stores the Secret Key in the Keychain.
-    /// Accessible when device is unlocked, device-only (not synced to iCloud).
+    /// Stores the Secret Key — uses Secure Enclave wrapping if available.
     @discardableResult
     func storeSecretKey(_ keyData: Data) -> Bool {
-        deleteSecretKey()
+        if SecureEnclaveService.shared.isAvailable {
+            return SecureEnclaveService.shared.storeSecretKey(keyData)
+        }
+        return storePlainKey(keyData)
+    }
 
+    /// Retrieves the Secret Key — tries SE-wrapped first, then plain Keychain.
+    func retrieveSecretKey() -> Data? {
+        return SecureEnclaveService.shared.retrieveSecretKey()
+    }
+
+    /// Deletes the Secret Key from all storage (SE-wrapped and plain).
+    @discardableResult
+    func deleteSecretKey() -> Bool {
+        SecureEnclaveService.shared.deleteAll()
+        return deletePlainKey()
+    }
+
+    /// True if a Secret Key exists in any storage.
+    var hasSecretKey: Bool {
+        SecureEnclaveService.shared.hasWrappedKey || hasPlainKey
+    }
+
+    /// Attempts to migrate a plain Keychain Secret Key to SE-wrapped storage.
+    /// Called on unlock to transparently upgrade security.
+    func migrateToSecureEnclaveIfNeeded() {
+        SecureEnclaveService.shared.migrateFromPlainKey()
+    }
+
+    // MARK: - Plain Keychain Storage (internal, used as fallback)
+
+    @discardableResult
+    func storePlainKey(_ keyData: Data) -> Bool {
+        deletePlainKey()
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -48,30 +79,24 @@ final class SecretKeyService {
             kSecValueData as String: keyData,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        return status == errSecSuccess
+        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    /// Retrieves the Secret Key from the Keychain.
-    func retrieveSecretKey() -> Data? {
+    func retrievePlainKey() -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true
         ]
-
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-
         guard status == errSecSuccess, let data = result as? Data else { return nil }
         return data
     }
 
-    /// Deletes the Secret Key from the Keychain.
     @discardableResult
-    func deleteSecretKey() -> Bool {
+    func deletePlainKey() -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -81,8 +106,7 @@ final class SecretKeyService {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    /// True if a Secret Key exists in the Keychain.
-    var hasSecretKey: Bool {
+    var hasPlainKey: Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

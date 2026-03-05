@@ -173,10 +173,22 @@ struct VaultListView: View {
     private var footer: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("\(vault.items.count) items \u{00B7} AES-256 \u{00B7} v\(updateCheck.currentVersion)")
+                Text("\(vault.activeItems.count) items \u{00B7} AES-256 \u{00B7} v\(updateCheck.currentVersion)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(theme.textGhost)
                 Spacer()
+                if !vault.trashedItems.isEmpty {
+                    Button(action: { vault.navigateToPanel(.trash) }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 9))
+                            Text("\(vault.trashedItems.count)")
+                                .font(.system(size: 10, design: .monospaced))
+                        }
+                        .foregroundColor(theme.textGhost)
+                    }
+                    .buttonStyle(.plain)
+                }
                 Text("Auto-lock: \(settings.autoLockEnabled ? "\(Int(settings.autoLockMinutes))m" : "Off")")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(theme.textGhost)
@@ -242,6 +254,19 @@ struct VaultItemRow: View {
                     .font(.system(size: 10))
                     .foregroundColor(theme.accentYellow)
                     .help(healthTooltip)
+            }
+
+            if item.type == .login, item.password != nil && !item.password!.isEmpty {
+                Button(action: { vault.copyToClipboard(item.password!, fieldName: "quickcopy-\(item.id)") }) {
+                    Image(systemName: vault.copiedField == "quickcopy-\(item.id)" ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(vault.copiedField == "quickcopy-\(item.id)" ? theme.accentGreen : theme.textFaint)
+                        .frame(width: 24, height: 24)
+                        .background(vault.copiedField == "quickcopy-\(item.id)" ? theme.accentGreen.opacity(0.15) : theme.fieldBg)
+                        .cornerRadius(5)
+                }
+                .buttonStyle(.plain)
+                .help("Copy password")
             }
 
             Button(action: { vault.toggleFavorite(item.id) }) {

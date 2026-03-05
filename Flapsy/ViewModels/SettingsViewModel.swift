@@ -27,6 +27,7 @@ final class SettingsViewModel: ObservableObject {
     }
     @Published var keepWindowOpen: Bool = false
     @Published var openURLCopyPassword: Bool = false
+    @Published var lastBackupDate: Date? = nil
 
     // Runtime-only: current pin state for this session (not persisted)
     @Published var isWindowPinned: Bool = false
@@ -65,6 +66,7 @@ final class SettingsViewModel: ObservableObject {
         keepWindowOpen = settings.keepWindowOpen
         isWindowPinned = settings.keepWindowOpen
         openURLCopyPassword = settings.openURLCopyPassword
+        lastBackupDate = settings.lastBackupDate
     }
 
     func resetToDefaults() {
@@ -83,6 +85,7 @@ final class SettingsViewModel: ObservableObject {
         keepWindowOpen = false
         isWindowPinned = false
         openURLCopyPassword = false
+        // lastBackupDate intentionally not reset
     }
 
     func toVaultSettings() -> VaultSettings {
@@ -100,7 +103,8 @@ final class SettingsViewModel: ObservableObject {
             confirmBeforeDelete: confirmBeforeDelete,
             checkForUpdates: checkForUpdates,
             keepWindowOpen: keepWindowOpen,
-            openURLCopyPassword: openURLCopyPassword
+            openURLCopyPassword: openURLCopyPassword,
+            lastBackupDate: lastBackupDate
         )
     }
 }
