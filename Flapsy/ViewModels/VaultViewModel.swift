@@ -257,16 +257,19 @@ final class VaultViewModel: ObservableObject {
             let query = searchText.lowercased()
             let nameLower = item.name.lowercased()
             let userLower = (item.username ?? "").lowercased()
+            let noteLower = (item.noteText ?? "").lowercased()
 
-            // Substring matches on name & username — always include, ranked highest
+            // Substring matches on name, username & noteText — always include, ranked highest
             let nameContains = nameLower.contains(query)
             let userContains = userLower.contains(query)
+            let noteContains = noteLower.contains(query)
 
-            if nameContains || userContains {
+            if nameContains || userContains || noteContains {
                 var score = 100
                 if nameLower.hasPrefix(query) { score += 50 }
                 else if nameContains { score += 25 }
                 if userContains { score += 10 }
+                if noteContains { score += 5 }
                 return (item, score)
             }
 

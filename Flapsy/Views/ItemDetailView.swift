@@ -692,9 +692,9 @@ struct ItemDetailView: View {
             }
 
             if showMarkdownPreview {
-                MarkdownTextView(text: item.noteText ?? "", theme: theme)
+                MarkdownTextView(text: item.noteText ?? "", theme: theme, highlightText: vault.searchText)
             } else {
-                SelectableText(text: item.noteText ?? "", theme: theme)
+                SelectableText(text: item.noteText ?? "", theme: theme, highlightText: vault.searchText)
             }
 
             HStack {
@@ -890,9 +890,11 @@ struct PasswordHistorySection: View {
 struct MarkdownTextView: View {
     let text: String
     let theme: FlapsyTheme
+    var highlightText: String = ""
 
     var body: some View {
-        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+        if var attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            let _ = Self.applyHighlight(to: &attributed, query: highlightText, theme: theme)
             Text(attributed)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(theme.text)
@@ -900,7 +902,21 @@ struct MarkdownTextView: View {
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            SelectableText(text: text, theme: theme)
+            SelectableText(text: text, theme: theme, highlightText: highlightText)
+        }
+    }
+
+    private static func applyHighlight(to attributed: inout AttributedString, query: String, theme: FlapsyTheme) {
+        guard !query.isEmpty else { return }
+        let plain = String(attributed.characters).lowercased()
+        let queryLower = query.lowercased()
+        var searchStart = plain.startIndex
+        while let range = plain.range(of: queryLower, range: searchStart..<plain.endIndex) {
+            let attrStart = attributed.index(attributed.startIndex, offsetByCharacters: plain.distance(from: plain.startIndex, to: range.lowerBound))
+            let attrEnd = attributed.index(attrStart, offsetByCharacters: plain.distance(from: range.lowerBound, to: range.upperBound))
+            attributed[attrStart..<attrEnd].backgroundColor = theme.accentGreen.opacity(0.3)
+            attributed[attrStart..<attrEnd].foregroundColor = theme.text
+            searchStart = range.upperBound
         }
     }
 }
@@ -967,9 +983,10 @@ struct IconButton: View {
 struct SelectableText: View {
     let text: String
     let theme: FlapsyTheme
+    var highlightText: String = ""
 
     var body: some View {
-        SelectableTextRepresentable(text: text, theme: theme)
+        SelectableTextRepresentable(text: text, theme: theme, highlightText: highlightText)
             .frame(height: Self.calculateHeight(text: text))
     }
 
@@ -990,6 +1007,7 @@ struct SelectableText: View {
 private struct SelectableTextRepresentable: NSViewRepresentable {
     let text: String
     let theme: FlapsyTheme
+    var highlightText: String = ""
 
     func makeNSView(context: Context) -> NSTextView {
         let textView = NSTextView()
@@ -1022,6 +1040,22 @@ private struct SelectableTextRepresentable: NSViewRepresentable {
         if let storage = textView.textStorage {
             let range = NSRange(location: 0, length: storage.length)
             storage.addAttribute(.paragraphStyle, value: style, range: range)
+            // Remove old highlights
+            storage.removeAttribute(.backgroundColor, range: range)
+            // Apply search highlights
+            if !highlightText.isEmpty {
+                let nsText = (text as NSString).lowercased as NSString
+                let query = (highlightText as NSString).lowercased as NSString
+                var searchRange = NSRange(location: 0, length: nsText.length)
+                let highlightColor = NSColor.systemGreen.withAlphaComponent(0.3)
+                while searchRange.location < nsText.length {
+                    let found = nsText.range(of: query as String, options: [], range: searchRange)
+                    guard found.location != NSNotFound else { break }
+                    storage.addAttribute(.backgroundColor, value: highlightColor, range: found)
+                    searchRange.location = found.location + found.length
+                    searchRange.length = nsText.length - searchRange.location
+                }
+            }
         }
     }
 }
