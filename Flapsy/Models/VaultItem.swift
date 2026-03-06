@@ -6,6 +6,18 @@ enum ItemType: String, Codable, CaseIterable {
     case note
 }
 
+struct PasswordHistoryEntry: Codable, Identifiable {
+    let id: UUID
+    let password: String
+    let changedAt: Date
+
+    init(password: String, changedAt: Date = Date()) {
+        self.id = UUID()
+        self.password = password
+        self.changedAt = changedAt
+    }
+}
+
 struct VaultItem: Codable, Identifiable {
     let id: UUID
     var type: ItemType
@@ -33,6 +45,9 @@ struct VaultItem: Codable, Identifiable {
 
     // Note fields
     var noteText: String?
+
+    // Password history (login items only)
+    var previousPasswords: [PasswordHistoryEntry]?
 
     // Soft delete
     var deletedAt: Date?

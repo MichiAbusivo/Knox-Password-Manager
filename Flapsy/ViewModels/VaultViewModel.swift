@@ -164,6 +164,13 @@ final class VaultViewModel: ObservableObject {
     @Published var changePasswordSuccess: Bool = false
     @Published var isChangingPassword: Bool = false
 
+    // MARK: - Edit Re-authentication
+    @Published var showReauthPrompt: Bool = false
+    @Published var reauthPassword: String = ""
+    @Published var reauthError: String = ""
+    @Published var isReauthenticating: Bool = false
+    private var reauthPendingItem: VaultItem?
+
     // MARK: - Vault Reset
     @Published var showResetConfirmation: Bool = false
     @Published var resetConfirmText: String = ""
@@ -765,6 +772,12 @@ final class VaultViewModel: ObservableObject {
         editTotpSecret = ""
         isEditingItem = false
 
+        // Clear re-auth state
+        showReauthPrompt = false
+        reauthPassword = ""
+        reauthError = ""
+        reauthPendingItem = nil
+
         // Clear sensitive export/change-password fields
         exportPasswordInput = ""
         exportPasswordConfirm = ""
@@ -995,6 +1008,16 @@ final class VaultViewModel: ObservableObject {
 
         switch items[idx].type {
         case .login:
+            // Track password history if password changed
+            if let oldPassword = items[idx].password,
+               !oldPassword.isEmpty,
+               editPassword != oldPassword {
+                let entry = PasswordHistoryEntry(password: oldPassword)
+                var history = items[idx].previousPasswords ?? []
+                history.insert(entry, at: 0)
+                if history.count > 20 { history = Array(history.prefix(20)) }
+                items[idx].previousPasswords = history
+            }
             items[idx].url = editUrl
             items[idx].username = editUsername
             items[idx].password = editPassword
@@ -1015,6 +1038,110 @@ final class VaultViewModel: ObservableObject {
 
     func cancelEditing() {
         isEditingItem = false
+    }
+
+    // MARK: - Edit Re-authentication
+
+    func requestEditWithReauth(_ item: VaultItem) {
+        // Non-login items or logins without passwords don't need re-auth
+        guard item.type == .login, let pw = item.password, !pw.isEmpty else {
+            startEditing(item)
+            return
+        }
+
+        // Try Touch ID first if enabled
+        if settingsViewModel?.biometricEnabled == true,
+           BiometricService.shared.isBiometricAvailable {
+            BiometricService.shared.authenticate(reason: "Authenticate to edit credentials") { [weak self] success, _ in
+                if success {
+                    self?.startEditing(item)
+                } else {
+                    // Fall back to password prompt
+                    self?.reauthPendingItem = item
+                    self?.reauthPassword = ""
+                    self?.reauthError = ""
+                    self?.showReauthPrompt = true
+                }
+            }
+        } else {
+            // No biometric — show password prompt
+            reauthPendingItem = item
+            reauthPassword = ""
+            reauthError = ""
+            showReauthPrompt = true
+        }
+    }
+
+    func confirmReauth() {
+        guard let item = reauthPendingItem else { return }
+        let password = reauthPassword
+        reauthPassword = ""
+
+        guard !password.isEmpty else {
+            reauthError = "Enter your master password"
+            return
+        }
+
+        isReauthenticating = true
+        reauthError = ""
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            guard let saltData = try? self.storage.readSalt(),
+                  let vaultData = try? self.storage.readEncryptedVaultDataForVerification(),
+                  let version = try? self.storage.readVaultVersion() else {
+                DispatchQueue.main.async {
+                    self.reauthError = "Verification failed"
+                    self.isReauthenticating = false
+                }
+                return
+            }
+
+            let secretKey = SecretKeyService.shared.retrieveSecretKey()
+            guard let testKey = EncryptionService.deriveKeyStandalone(
+                from: password, salt: saltData, version: version, secretKey: secretKey
+            ) else {
+                DispatchQueue.main.async {
+                    self.reauthError = "Verification failed"
+                    self.isReauthenticating = false
+                }
+                return
+            }
+
+            let verified: Bool
+            if let box = try? AES.GCM.SealedBox(combined: vaultData.primary),
+               let _ = try? AES.GCM.open(box, using: testKey) {
+                verified = true
+            } else if let box = try? AES.GCM.SealedBox(combined: vaultData.fallback),
+                      let _ = try? AES.GCM.open(box, using: testKey) {
+                verified = true
+            } else {
+                verified = false
+            }
+
+            guard verified else {
+                DispatchQueue.main.async {
+                    self.reauthError = "Incorrect password"
+                    self.isReauthenticating = false
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
+                self.isReauthenticating = false
+                self.showReauthPrompt = false
+                self.reauthPendingItem = nil
+                self.startEditing(item)
+            }
+        }
+    }
+
+    func cancelReauth() {
+        showReauthPrompt = false
+        reauthPassword = ""
+        reauthError = ""
+        reauthPendingItem = nil
     }
 
     // MARK: - Card Input Formatting
@@ -1268,7 +1395,7 @@ final class VaultViewModel: ObservableObject {
             guard let self = self else { return }
 
             guard let saltData = try? self.storage.readSalt(),
-                  let encryptedData = try? self.storage.readEncryptedVaultData(),
+                  let vaultData = try? self.storage.readEncryptedVaultDataForVerification(),
                   let version = try? self.storage.readVaultVersion() else {
                 DispatchQueue.main.async {
                     self.exportError = "Could not verify password"
@@ -1289,11 +1416,19 @@ final class VaultViewModel: ObservableObject {
                 return
             }
 
-            // Trial decryption
-            do {
-                let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
-                _ = try AES.GCM.open(sealedBox, using: testKey)
-            } catch {
+            // Trial decryption (try without HMAC first, then with)
+            let exportVerified: Bool
+            if let box = try? AES.GCM.SealedBox(combined: vaultData.primary),
+               let _ = try? AES.GCM.open(box, using: testKey) {
+                exportVerified = true
+            } else if let box = try? AES.GCM.SealedBox(combined: vaultData.fallback),
+                      let _ = try? AES.GCM.open(box, using: testKey) {
+                exportVerified = true
+            } else {
+                exportVerified = false
+            }
+
+            guard exportVerified else {
                 DispatchQueue.main.async {
                     self.exportError = "Incorrect master password"
                     self.isExporting = false
@@ -1449,7 +1584,7 @@ final class VaultViewModel: ObservableObject {
             guard let self = self else { return }
 
             guard let saltData = try? self.storage.readSalt(),
-                  let encryptedData = try? self.storage.readEncryptedVaultData(),
+                  let vaultData = try? self.storage.readEncryptedVaultDataForVerification(),
                   let version = try? self.storage.readVaultVersion() else {
                 DispatchQueue.main.async {
                     self.changePasswordError = "Could not verify password"
@@ -1470,10 +1605,19 @@ final class VaultViewModel: ObservableObject {
                 return
             }
 
-            do {
-                let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
-                _ = try AES.GCM.open(sealedBox, using: testKey)
-            } catch {
+            // Trial decryption (try without HMAC first, then with)
+            let changePwVerified: Bool
+            if let box = try? AES.GCM.SealedBox(combined: vaultData.primary),
+               let _ = try? AES.GCM.open(box, using: testKey) {
+                changePwVerified = true
+            } else if let box = try? AES.GCM.SealedBox(combined: vaultData.fallback),
+                      let _ = try? AES.GCM.open(box, using: testKey) {
+                changePwVerified = true
+            } else {
+                changePwVerified = false
+            }
+
+            guard changePwVerified else {
                 DispatchQueue.main.async {
                     self.changePasswordError = "Incorrect current password"
                     self.isChangingPassword = false

@@ -138,9 +138,65 @@ final class StorageService {
     }
 
     /// Reads the encrypted payload from the vault file, stripping the header if present.
+    /// For files with HMAC, the last 32 bytes are the HMAC tag and must be excluded.
+    /// This method doesn't know if HMAC is present, so callers should use
+    /// `decryptVaultWithIntegrity()` which handles both cases.
     func readEncryptedVaultData() throws -> Data {
         let fileData = try Data(contentsOf: vaultFileURL)
         return StorageService.stripVaultHeader(fileData)
+    }
+
+    /// Reads the raw vault file and returns both ciphertext variants for trial decryption:
+    /// (withoutHMAC, withHMAC). Callers should try withoutHMAC first, then fall back to withHMAC.
+    /// Used for password verification (re-auth, export, change password) where the standalone
+    /// key can't use `decryptVaultWithIntegrity()`.
+    func readEncryptedVaultDataForVerification() throws -> (primary: Data, fallback: Data) {
+        let fileData = try Data(contentsOf: vaultFileURL)
+        let full = StorageService.stripVaultHeader(fileData)
+
+        let hasHeader = fileData.count > StorageService.vaultHeaderSize &&
+            String(data: fileData[0..<4], encoding: .ascii) == StorageService.vaultMagic
+        let hasPossibleHMAC = hasHeader &&
+            fileData.count > StorageService.vaultHeaderSize + 28 + StorageService.hmacSize
+
+        if hasPossibleHMAC {
+            let payload = Data(fileData.prefix(fileData.count - StorageService.hmacSize))
+            let withoutHMAC = StorageService.stripVaultHeader(payload)
+            return (primary: withoutHMAC, fallback: full)
+        }
+
+        return (primary: full, fallback: full)
+    }
+
+    /// Decrypts the vault, automatically handling HMAC presence and verification.
+    /// Tries decryption with HMAC stripped first (new format), falls back to full
+    /// ciphertext (old format). Verifies HMAC if present.
+    func decryptVaultWithIntegrity() throws -> VaultData {
+        let fileData = try Data(contentsOf: vaultFileURL)
+        let hasHeader = fileData.count > StorageService.vaultHeaderSize &&
+            String(data: fileData[0..<4], encoding: .ascii) == StorageService.vaultMagic
+        let hasPossibleHMAC = hasHeader &&
+            fileData.count > StorageService.vaultHeaderSize + 28 + StorageService.hmacSize
+
+        if hasPossibleHMAC {
+            // Try with HMAC stripped
+            let payload = Data(fileData.prefix(fileData.count - StorageService.hmacSize))
+            let storedHMAC = Data(fileData.suffix(StorageService.hmacSize))
+            let ciphertext = StorageService.stripVaultHeader(payload)
+
+            if let vault = try? encryption.decryptVault(ciphertext) {
+                // Decryption succeeded with HMAC stripped — verify HMAC
+                if !encryption.verifyHMAC(over: payload, expected: storedHMAC) {
+                    logger.error("Vault HMAC integrity check FAILED — possible corruption or tampering")
+                    throw EncryptionError.integrityCheckFailed
+                }
+                return vault
+            }
+        }
+
+        // Fall back: decrypt full ciphertext (pre-HMAC vault)
+        let fullCiphertext = StorageService.stripVaultHeader(fileData)
+        return try encryption.decryptVault(fullCiphertext)
     }
 
     /// Reads the embedded salt from the vault file header, if present.
@@ -159,6 +215,8 @@ final class StorageService {
         return Data(fileData[vaultHeaderSize...])
     }
 
+    private static let hmacSize = 32  // SHA-256 output
+
     private func buildVaultFile(encrypted: Data, salt: Data, version: VaultKeyVersion) -> Data {
         var fileData = Data()
         fileData.append(StorageService.vaultMagic.data(using: .ascii)!)
@@ -166,6 +224,12 @@ final class StorageService {
         fileData.append(Data(bytes: &ver, count: 4))
         fileData.append(salt.prefix(32))
         fileData.append(encrypted)
+
+        // Append HMAC-SHA256 integrity tag over the entire file contents
+        if let hmac = encryption.computeHMAC(over: fileData) {
+            fileData.append(hmac)
+        }
+
         return fileData
     }
 
@@ -227,7 +291,6 @@ final class StorageService {
     func unlockVault(masterPassword: String) throws -> (VaultData, Bool) {
         let version = try readVaultVersion()
         let salt = try readSaltWithFallback()
-        let encryptedData = try readEncryptedVaultData()
 
         switch version {
         case .v1:
@@ -237,6 +300,7 @@ final class StorageService {
             }
 
             do {
+                let encryptedData = try readEncryptedVaultData()
                 let vault = try encryption.decryptVault(encryptedData)
                 upgradeSaltIntegrityIfNeeded()
                 return (vault, true)  // needs migration to v2
@@ -256,11 +320,11 @@ final class StorageService {
             }
 
             do {
-                let vault = try encryption.decryptVault(encryptedData)
+                let vault = try decryptVaultWithIntegrity()
                 return (vault, false)
             } catch {
                 encryption.wipeKey()
-                throw EncryptionError.invalidPassword
+                throw error
             }
         }
     }
@@ -294,35 +358,32 @@ final class StorageService {
     /// Unlocks a v2 vault when the Secret Key was manually entered (recovery scenario).
     func unlockVault(masterPassword: String, recoveredSecretKey: Data) throws -> VaultData {
         let salt = try readSaltWithFallback()
-        let encryptedData = try readEncryptedVaultData()
 
         guard encryption.deriveKeyV2(from: masterPassword, salt: salt, secretKey: recoveredSecretKey) != nil else {
             throw EncryptionError.keyDerivationFailed
         }
 
         do {
-            let vault = try encryption.decryptVault(encryptedData)
+            let vault = try decryptVaultWithIntegrity()
             // Re-store the recovered Secret Key in Keychain
             SecretKeyService.shared.storeSecretKey(recoveredSecretKey)
             return vault
         } catch {
             encryption.wipeKey()
-            throw EncryptionError.invalidPassword
+            throw error
         }
     }
 
     // MARK: - Unlock with Pre-Derived Key (Touch ID)
 
     func unlockVault(withKeyData keyData: Data) throws -> VaultData {
-        let encryptedData = try readEncryptedVaultData()
-
         encryption.setKey(from: keyData)
 
         do {
-            return try encryption.decryptVault(encryptedData)
+            return try decryptVaultWithIntegrity()
         } catch {
             encryption.wipeKey()
-            throw EncryptionError.invalidPassword
+            throw error
         }
     }
 

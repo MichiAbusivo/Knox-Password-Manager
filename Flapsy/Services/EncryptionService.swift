@@ -218,6 +218,33 @@ final class EncryptionService {
         return try AES.GCM.open(sealedBox, using: key)
     }
 
+    // MARK: - HMAC Key Derivation
+
+    /// Derives a 256-bit HMAC key from the current vault key using HKDF-SHA256.
+    func deriveHMACKey() -> SymmetricKey? {
+        guard let keyData = _derivedKeyData else { return nil }
+        let vaultKey = SymmetricKey(data: keyData)
+        let info = "com.knox.vault-hmac".data(using: .utf8)!
+        return HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: vaultKey,
+            info: info,
+            outputByteCount: 32
+        )
+    }
+
+    /// Computes HMAC-SHA256 over the given data using the HMAC key.
+    func computeHMAC(over data: Data) -> Data? {
+        guard let hmacKey = deriveHMACKey() else { return nil }
+        let mac = HMAC<SHA256>.authenticationCode(for: data, using: hmacKey)
+        return Data(mac)
+    }
+
+    /// Verifies HMAC-SHA256 over the given data matches the expected tag.
+    func verifyHMAC(over data: Data, expected: Data) -> Bool {
+        guard let hmacKey = deriveHMACKey() else { return false }
+        return HMAC<SHA256>.isValidAuthenticationCode(expected, authenticating: data, using: hmacKey)
+    }
+
     // MARK: - Vault Encryption Helpers
 
     /// Encodes a VaultData to JSON, then encrypts it.
@@ -295,6 +322,7 @@ enum EncryptionError: Error, LocalizedError {
     case saltCorrupted
     case secretKeyMissing
     case unsupportedVaultVersion(UInt32)
+    case integrityCheckFailed
 
     var errorDescription: String? {
         switch self {
@@ -307,6 +335,7 @@ enum EncryptionError: Error, LocalizedError {
         case .saltCorrupted: return "Salt file is corrupted — vault cannot be unlocked"
         case .secretKeyMissing: return "Secret Key is missing — use your Emergency Kit to recover"
         case .unsupportedVaultVersion(let v): return "This vault requires a newer version of Knox (vault version \(v))"
+        case .integrityCheckFailed: return "Vault integrity check failed — file may be corrupted or tampered with"
         }
     }
 }

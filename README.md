@@ -31,6 +31,8 @@ Grab the latest release from the [Releases page](https://github.com/sprtmed/Knox
 - **Import** — Bring your passwords from 1Password, Bitwarden, or any CSV
 - **Export** — Encrypted `.knox` backup or plain CSV. Backup reminder if you haven't exported in 30+ days
 - **Dark & light mode** — Follows your preference
+- **Password history** — Tracks the last 20 passwords for each login item with timestamps, so you can roll back if needed
+- **Edit re-authentication** — Requires master password or Touch ID before editing login credentials, preventing unauthorized changes
 - **Vault overwrite protection** — Automatic backups on every save, Keychain recovery, and "Start Fresh" safety net
 - **Completely free** — No trials, no tiers, no subscriptions. Ever.
 
@@ -49,7 +51,10 @@ This is a password manager, so security isn't a feature — it's the foundation.
 | **Key memory** | Pinned to RAM (`mlock`), zeroed on lock (`resetBytes`) |
 | **Anti-debug** | `ptrace(PT_DENY_ATTACH)` + `sysctl` detection in release builds |
 | **File permissions** | `0600` (owner read/write only) on all vault files |
+| **Vault integrity** | HMAC-SHA256 over entire vault file, verified on every unlock |
 | **Salt integrity** | SHA-256 checksum with redundant copy in vault header |
+| **Edit re-auth** | Master password or Touch ID required before editing credentials |
+| **Password history** | Last 20 passwords per item with timestamps, encrypted in vault |
 | **Brute-force protection** | Exponential backoff (2s, 4s, 8s, 16s, 30s cap), persisted across restarts |
 | **Clipboard** | Marked as concealed (`NSPasteboard.ConcealedType`) + auto-clear timer |
 | **Password requirements** | 12-character minimum with real-time strength scoring |
@@ -80,7 +85,9 @@ Master Password + Salt (32 bytes)
     AES-256-GCM encrypt/decrypt
 ```
 
-Your vault file (`vault.enc`) contains a 40-byte header (`FLPV` magic + version + embedded salt) followed by the AES-256-GCM ciphertext. Even if someone steals the file, they need both your master password AND the 128-bit secret key to decrypt it. Brute-forcing that combination is computationally infeasible.
+Your vault file (`vault.enc`) contains a 40-byte header (`FLPV` magic + version + embedded salt) followed by the AES-256-GCM ciphertext and a 32-byte HMAC-SHA256 integrity tag. The HMAC is computed over the entire file (header + ciphertext) using a separate key derived via HKDF from the vault key. On every unlock, KNOX verifies the HMAC before trusting the data — any tampering or corruption is detected immediately.
+
+Even if someone steals the file, they need both your master password AND the 128-bit secret key to decrypt it. Brute-forcing that combination is computationally infeasible.
 
 ### What KNOX can't protect against
 
@@ -129,9 +136,10 @@ Offset  Size    Content
 4       4       Version: UInt32 big-endian (2 = Argon2id)
 8       32      Salt (redundant backup copy)
 40      ...     AES-256-GCM ciphertext (nonce + encrypted JSON + auth tag)
+EOF-32   32     HMAC-SHA256 integrity tag over bytes [0..EOF-32]
 ```
 
-Salt is stored separately in `salt.dat` (32 bytes + SHA-256 checksum = 64 bytes) with a fallback to the embedded copy in the vault header.
+Salt is stored separately in `salt.dat` (32 bytes + SHA-256 checksum = 64 bytes) with a fallback to the embedded copy in the vault header. The HMAC tag uses a separate key derived via `HKDF-SHA256(vaultKey, info: "com.knox.vault-hmac")`.
 
 ---
 

@@ -62,7 +62,7 @@ struct ItemDetailView: View {
                     .onTapGesture { dismissDetail() }
 
                     // Action buttons (not dismissable)
-                    Button(action: { vault.startEditing(item) }) {
+                    Button(action: { vault.requestEditWithReauth(item) }) {
                         Text("\u{270E}")
                             .font(.system(size: 12))
                             .foregroundColor(theme.textSecondary)
@@ -129,6 +129,11 @@ struct ItemDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete \"\(item.name)\"?")
+        }
+        .overlay {
+            if vault.showReauthPrompt {
+                ReauthOverlay()
+            }
         }
     }
 
@@ -536,6 +541,11 @@ struct ItemDetailView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
+
+            // Password history
+            if let history = item.previousPasswords, !history.isEmpty {
+                PasswordHistorySection(history: history)
+            }
         }
     }
 
@@ -699,6 +709,179 @@ struct ItemDetailView: View {
         .padding(12)
         .background(theme.fieldBg)
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Re-authentication Overlay
+
+struct ReauthOverlay: View {
+    @EnvironmentObject var vault: VaultViewModel
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(theme.accentBlueLt)
+
+                Text("Re-authenticate")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundColor(theme.text)
+
+                Text("Enter your master password to edit credentials")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(theme.textSecondary)
+                    .multilineTextAlignment(.center)
+
+                ZStack(alignment: .leading) {
+                    if vault.reauthPassword.isEmpty {
+                        Text("Master password")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundColor(theme.textMuted)
+                            .padding(10)
+                    }
+                    SecureField("", text: $vault.reauthPassword)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(theme.text)
+                        .padding(10)
+                        .onSubmit { vault.confirmReauth() }
+                }
+                .background(theme.inputBg)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(vault.reauthError.isEmpty ? theme.inputBorder : theme.accentRed, lineWidth: 1)
+                )
+
+                if !vault.reauthError.isEmpty {
+                    Text(vault.reauthError)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(theme.accentRed)
+                }
+
+                HStack(spacing: 8) {
+                    Button(action: { vault.confirmReauth() }) {
+                        HStack(spacing: 4) {
+                            if vault.isReauthenticating {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.white)
+                            }
+                            Text(vault.isReauthenticating ? "Verifying..." : "Confirm")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(hex: "3b82f6"), Color(hex: "2563eb")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(vault.isReauthenticating)
+
+                    Button(action: { vault.cancelReauth() }) {
+                        Text("Cancel")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(theme.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(theme.fieldBg)
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 300)
+            .background(theme.cardBg)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(theme.cardBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.3), radius: 20)
+        }
+    }
+}
+
+// MARK: - Password History Section
+
+struct PasswordHistorySection: View {
+    let history: [PasswordHistoryEntry]
+    @Environment(\.theme) var theme
+    @EnvironmentObject var vault: VaultViewModel
+    @State private var expanded = false
+    @State private var revealedID: UUID? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }) {
+                HStack(spacing: 6) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 8))
+                    Text("PASSWORD HISTORY")
+                        .font(.system(size: 9, design: .monospaced))
+                        .tracking(1)
+                    Text("(\(history.count))")
+                        .font(.system(size: 9, design: .monospaced))
+                }
+                .foregroundColor(theme.textFaint)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(spacing: 4) {
+                    ForEach(history) { entry in
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(revealedID == entry.id ? entry.password : String(repeating: "\u{2022}", count: 14))
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(revealedID == entry.id ? theme.text : theme.textSecondary)
+                                    .lineLimit(1)
+                                Text(entry.changedAt.formatted(.dateTime.month(.abbreviated).day().year().hour().minute()))
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundColor(theme.textGhost)
+                            }
+                            Spacer()
+                            HStack(spacing: 4) {
+                                IconButton(
+                                    icon: revealedID == entry.id ? "eye.slash" : "eye",
+                                    isActive: false,
+                                    action: { revealedID = revealedID == entry.id ? nil : entry.id }
+                                )
+                                IconButton(
+                                    icon: vault.copiedField == "hist-\(entry.id)" ? "checkmark" : "doc.on.doc",
+                                    isActive: vault.copiedField == "hist-\(entry.id)",
+                                    action: { vault.copyToClipboard(entry.password, fieldName: "hist-\(entry.id)") }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(theme.fieldBg)
+                        .cornerRadius(6)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(theme.cardBg)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(theme.cardBorder, lineWidth: 1)
+        )
     }
 }
 
